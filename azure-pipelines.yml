@@ -1,8 +1,3 @@
-# ASP.NET Core (.NET Framework)
-# Build and test ASP.NET Core projects targeting the full .NET Framework.
-# Add steps that publish symbols, save build artifacts, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
-
 trigger:
 - develop
 
@@ -28,7 +23,51 @@ steps:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
 
+# 🔹 Run Tests with Code Coverage
 - task: VSTest@2
+  displayName: 'Run Tests with Code Coverage'
   inputs:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
+    codeCoverageEnabled: true
+
+# 🔹 Install ReportGenerator tool
+- task: DotNetCoreCLI@2
+  displayName: 'Install ReportGenerator Tool'
+  inputs:
+    command: custom
+    custom: tool
+    arguments: install --tool-path . dotnet-reportgenerator-globaltool
+
+# 🔹 Generate Code Coverage Report
+- script: |
+    .\reportgenerator -reports:$(Build.SourcesDirectory)\**\TestResults\**\*.coveragexml -targetdir:$(Build.SourcesDirectory)\coverlet\reports -reporttypes:"HtmlInline_AzurePipelines;Cobertura"
+  displayName: 'Generate Code Coverage Report'
+
+# 🔹 Publish Code Coverage Report
+- task: PublishBuildArtifacts@1
+  displayName: 'Upload Code Coverage Report'
+  inputs:
+    pathToPublish: $(Build.SourcesDirectory)\coverlet\reports
+    artifactName: 'CodeCoverageReport'
+
+# 🔹 Snyk Security Scan
+- task: SnykSecurityScan@1
+  displayName: 'Run Snyk Security Scan'
+  inputs:
+    serviceConnectionEndpoint: 'Snyk-Security-Scanner'
+    testType: 'app'
+    monitorWhen: 'always'
+    failOnIssues: false
+    additionalArguments: '--json > snyk-report.json'
+
+- script: cat snyk-report.json
+  displayName: 'Display Snyk Report in Logs'
+
+# 🔹 Upload Snyk Report as an Artifact
+- task: PublishBuildArtifacts@1
+  displayName: 'Upload Snyk Report'
+  inputs:
+    pathToPublish: snyk-report.json
+    artifactName: 'SnykReport'
+
